@@ -1,5 +1,5 @@
 import librosa
-import soundfile
+import soundfile as sf
 from pathlib import Path
 import librosa.display
 import matplotlib.pyplot as plt
@@ -7,68 +7,19 @@ import numpy as np
 import time
 from scipy.signal import correlate
 import pandas as pd
+from scipy.io import wavfile
 
 file_path_full = "videoplayback.wav"
 
-file_path_match = "matchingplayback.wav"
+file_path_match = "matchplayback2.wav"
 
-def matches_fully(spectrogram_full, spectrogram_match):
-    full = np.array(spectrogram_full)
-    match = np.array(spectrogram_match)
-    
-    for (i, j), value in np.ndenumerate(match):
-        if (value != full[i][j]):
-            return False
-        
-    return True
+measures_to_time = dict()
 
-def find_all_matches(signal_full, signal_match):
-    spectrogram_full = signal_to_db(signal_full)
-    spectrogram_match = signal_to_db(signal_match)
-    
-    full = np.array(spectrogram_full)
-    match = np.array(spectrogram_match)
-    
-    full_w = full.shape[1]
-    match_w = match.shape[1]
-    
-    max_col = full_w - match_w + 1
-    
-    all_matches = []
-    
-    for c in range(max_col):
-        window = full[:, c : c + match_w]
-        
-        if np.allclose(window, match, rtol=1e-1):
-            all_matches.append(c)
-                
-    return all_matches
+SAMPLE_RATE = 44100
 
-def find_matches_cross_correlation(signal_full, signal_match, threshold_percent=99.99999):
-    # Ensure they are numpy arrays
-    full = np.array([1, 2, 3, 4, 5, 6])#signal_to_db(signal_full))
-    match = np.array([2, 3])#signal_to_db(signal_match))
-    
-    # 1. Perform 2D Cross-Correlation (Valid mode keeps it within bounds)
-    # We correlate along the time axis (columns)
-    correlation = correlate(full, match, mode='valid')
-    
-    # Because full and match have the same height, 'correlation' becomes a 1D array
-    # representing how well they match at each column shift.
-    correlation_1d = correlation[0] 
-    
-    # 2. Find the peaks (where the snippet matches best)
-    # A perfect match will create a massive peak in the correlation values.
-    max_correlation_val = np.max(correlation_1d)
-    
-    # Define a threshold (e.g., 95% of the absolute maximum match strength)
-    # This accounts for tiny noise or rounding differences.
-    threshold = max_correlation_val * (threshold_percent / 100.0)
-    
-    # Find all column indices where the correlation crosses our threshold
-    match_indices = np.where(correlation_1d >= threshold)[0]
-    
-    return match_indices.tolist()
+HOP_LENGTH = 512
+
+#def what_measure_match
 
 def signal_to_db(signal):
     stft = librosa.stft(signal)
@@ -76,20 +27,20 @@ def signal_to_db(signal):
     spectrogram_db = librosa.amplitude_to_db(spectrogram)
     return spectrogram_db
 
-def signal_to_freq(signal):
+def signal_to_ampl(signal):
     stft = librosa.stft(signal)
     spectrogram = np.abs(stft)
     return spectrogram
 
 def plot_spectrogram_and_save(signal, sample_rate, output_path: Path):
-    spectrogram_freq = signal_to_freq(signal)
+    spectrogram_ampl = signal_to_ampl(signal)
     plt.figure(figsize=(10,4))
-    img = librosa.display.specshow(spectrogram_freq, 
+    img = librosa.display.specshow(spectrogram_ampl, 
     y_axis='log', x_axis='time', sr=sample_rate, cmap='inferno')
-    plt.hist(spectrogram_freq)
+    plt.hist(spectrogram_ampl)
 
-def plot_values_histogram(spectrogram_freq):
-    plt.hist(spectrogram_freq.ravel(), bins=100, range=(1, spectrogram_freq.max()))
+def plot_values_histogram(spectrogram_ampl):
+    plt.hist(spectrogram_ampl.ravel(), bins=100, range=(1, spectrogram_ampl.max()))
     plt.show()
 
 
@@ -112,35 +63,77 @@ def correlate(full, match):
                 
     return np.concat(all_windows, axis=1)
 
+def similarity_significance(window, match, cosine_similarity):
+    window_max = np.max(window, axis=1, keepdims=True)
+    match_max = np.max(match, axis=1, keepdims=True)
+    avg_importance = (window_max + match_max) / 2.0
+    total_importance = np.sum(avg_importance)
+    weighted_arr = cosine_similarity * avg_importance
+    total_weight = np.sum(weighted_arr)
+    weight = total_weight / total_importance
+    
+    return weight
+
+def weighing(full, match, cosine_similarity):
+    full_w = full.shape[1]
+    match_w = match.shape[1]
+
+    max_col = full_w - match_w + 1
+        
+    all_windows = []
+
+    for c in range(max_col):
+        window = full[:, c : c + match_w]
+        all_windows.append(similarity_significance(window, match, cosine_similarity[:, c : c + 1]))
+
+    return all_windows
+    
+def play_potential_answer(timeframe, match_signal, full_signal):
+    signal_cropped = full_signal[timeframe * HOP_LENGTH : timeframe * HOP_LENGTH + len(match_signal)]
+    output_path = "potentialanswer.wav"
+
+    sf.write(output_path, signal_cropped, SAMPLE_RATE)
+    print(f"Audio successfully saved to {output_path}")    
+
 def main(): 
     start = time.time()
 
-    SAMPLE_RATE = 44100
-    signal_full, _ = librosa.load(file_path_full, sr=SAMPLE_RATE, duration=10.0)
-    signal_match, _ = librosa.load(file_path_match, sr=SAMPLE_RATE)
+    full_signal, _ = librosa.load(file_path_full, sr=SAMPLE_RATE, duration=20.0)
+    match_signal, _ = librosa.load(file_path_match, sr=SAMPLE_RATE)
 
     end = time.time()
     print(f"File loaded successfully!")
     print(f"Load Time: {(end - start):.2f} seconds")
     print(f"Sample Rate: {SAMPLE_RATE} Hz")
-    print(f"Total Audio Samples: {len(signal_full)}")
-    duration_full = len(signal_full) / SAMPLE_RATE
-    duration_match = len(signal_match) / SAMPLE_RATE
+    print(f"Total Audio Samples: {len(full_signal)}")
+    duration_full = len(full_signal) / SAMPLE_RATE
+    duration_match = len(match_signal) / SAMPLE_RATE
     print(f"Length of Audio: {duration_full:.2f} seconds")
     print(f"Length of Audio: {duration_match:.2f} seconds")
 
-    #all_matches = find_all_matches(signal_full, signal_match)
+    #best_matches = find_best_matches(full_signal, match_signal)
 
-    #plot_spectrogram_and_save(signal_full, SAMPLE_RATE, Path('img') / 'spectrogram.png')
+    #plot_spectrogram_and_save(full_signal, SAMPLE_RATE, Path('img') / 'spectrogram.png')
     #print()
-    #plot_spectrogram_and_save(signal_match, SAMPLE_RATE, Path('img2') / 'spectrogram2.png')
+    #plot_spectrogram_and_save(match_signal, SAMPLE_RATE, Path('img2') / 'spectrogram2.png')
     #plt.show()
 
-    full_freq = signal_to_freq(signal_full)
-    match_freq = signal_to_freq(signal_match)
+    full_ampl = signal_to_ampl(full_signal)
+    match_ampl = signal_to_ampl(match_signal)
 
-    df = pd.DataFrame(correlate(full_freq, match_freq))
-    df.to_excel('output.xlsx', index=False)
+    full_stft = librosa.stft(full_signal, hop_length=HOP_LENGTH)
+    match_stft = librosa.stft(match_signal, hop_length=HOP_LENGTH)
+
+    cosine_sim = correlate(full_ampl, match_ampl)
+
+    weighted_similarity = weighing(full_ampl, match_ampl, cosine_sim)
+    idx = int(np.argmax(weighted_similarity))
+
+    #similarity_df = pd.DataFrame(weighted_similarity)
+    #similarity_df.to_excel('similarity435.xlsx', index=False)
+
+    play_potential_answer(idx, match_signal, full_signal)
+
 
 if __name__ == "__main__":
     main()

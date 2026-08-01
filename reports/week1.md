@@ -1,4 +1,5 @@
 # week 1 (6.27.26 - 7.4.26)
+
 researched spectrograms on wiki
 ft, complex sinusoids, stft, spectrogram generation, windowing
 
