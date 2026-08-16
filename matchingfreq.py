@@ -9,9 +9,9 @@ from scipy.signal import correlate
 import pandas as pd
 from scipy.io import wavfile
 
-file_path_full = "videoplayback.wav"
+file_path_full = "academyfull.wav"
 
-file_path_match = "matchplayback2.wav"
+file_path_match = "academyhorns5.wav"
 
 measures_to_time = dict()
 
@@ -45,8 +45,10 @@ def plot_values_histogram(spectrogram_ampl):
 
 
 def cosine_similarity(window, match):
-    return np.sum(window * match, axis=1, keepdims=True) / (np.linalg.norm(window, 
-    axis=1, keepdims=True) * np.linalg.norm(match, axis=1, keepdims=True))
+    sums = np.sum(window * match, axis=1, keepdims=True)
+    np.divide(sums, (np.linalg.norm(window, 
+    axis=1, keepdims=True) * np.linalg.norm(match, axis=1, keepdims=True)), out=sums)
+    return sums
 
 
 def correlate(full, match):
@@ -98,7 +100,7 @@ def play_potential_answer(timeframe, match_signal, full_signal):
 def main(): 
     start = time.time()
 
-    full_signal, _ = librosa.load(file_path_full, sr=SAMPLE_RATE, duration=20.0)
+    full_signal, _ = librosa.load(file_path_full, sr=SAMPLE_RATE, duration=120.0)
     match_signal, _ = librosa.load(file_path_match, sr=SAMPLE_RATE)
 
     end = time.time()
@@ -113,10 +115,10 @@ def main():
 
     #best_matches = find_best_matches(full_signal, match_signal)
 
-    #plot_spectrogram_and_save(full_signal, SAMPLE_RATE, Path('img') / 'spectrogram.png')
+    plot_values_histogram(signal_to_ampl(full_signal))
     #print()
-    #plot_spectrogram_and_save(match_signal, SAMPLE_RATE, Path('img2') / 'spectrogram2.png')
-    #plt.show()
+    plot_values_histogram(signal_to_ampl(match_signal))
+    plt.show()
 
     full_ampl = signal_to_ampl(full_signal)
     match_ampl = signal_to_ampl(match_signal)
@@ -129,8 +131,8 @@ def main():
     weighted_similarity = weighing(full_ampl, match_ampl, cosine_sim)
     idx = int(np.argmax(weighted_similarity))
 
-    #similarity_df = pd.DataFrame(weighted_similarity)
-    #similarity_df.to_excel('similarity435.xlsx', index=False)
+    similarity_df = pd.DataFrame(weighted_similarity)
+    similarity_df.to_excel('similarity435.xlsx', index=False)
 
     play_potential_answer(idx, match_signal, full_signal)
 

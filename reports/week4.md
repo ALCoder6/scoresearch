@@ -6,3 +6,5 @@ for each timeframe, consider which are louder and which are quieter
 how loud the frequency gets in in the window and the match for every frequency
 take the avg or max 
 multiply the importance by the similarity
+
+![successful identification and match between original and original clip at timestamp 435](successfulmatch435.png)
