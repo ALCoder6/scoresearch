@@ -46,9 +46,10 @@ def plot_values_histogram(spectrogram_ampl):
 
 def cosine_similarity(window, match):
     sums = np.sum(window * match, axis=1, keepdims=True)
-    np.divide(sums, (np.linalg.norm(window, 
-    axis=1, keepdims=True) * np.linalg.norm(match, axis=1, keepdims=True)), out=sums)
-    return sums
+    output = np.zeros_like(sums)
+    denominator = np.linalg.norm(window, axis=1, keepdims=True) * np.linalg.norm(match, axis=1, keepdims=True)
+    np.divide(sums, denominator, out=output, where=denominator != 0)
+    return output
 
 
 def correlate(full, match):
@@ -100,8 +101,8 @@ def play_potential_answer(timeframe, match_signal, full_signal):
 def main(): 
     start = time.time()
 
-    full_signal, _ = librosa.load(file_path_full, sr=SAMPLE_RATE, duration=120.0)
-    match_signal, _ = librosa.load(file_path_match, sr=SAMPLE_RATE)
+    full_signal, _ = librosa.load(file_path_full, sr=SAMPLE_RATE)
+    match_signal, _ = librosa.load(file_path_match, sr=SAMPLE_RATE, offset=260, duration=5)
 
     end = time.time()
     print(f"File loaded successfully!")
@@ -115,9 +116,9 @@ def main():
 
     #best_matches = find_best_matches(full_signal, match_signal)
 
-    plot_values_histogram(signal_to_ampl(full_signal))
+    #plot_values_histogram(signal_to_ampl(full_signal))
     #print()
-    plot_values_histogram(signal_to_ampl(match_signal))
+    #plot_values_histogram(signal_to_ampl(match_signal))
     plt.show()
 
     full_ampl = signal_to_ampl(full_signal)
