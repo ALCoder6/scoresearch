@@ -11,3 +11,9 @@ look for similarity metric that does care about the time and amplitude
 pip install -r requirements
 
 debugging
+
+audio needs to be streamed in, instead of file
+
+displaying sheet music as visual 
+
+for when youre in a rest,
