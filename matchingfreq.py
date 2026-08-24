@@ -94,7 +94,8 @@ def top_k_non_adjacent(arr, k, min_dist=1):
     Finds the top k values and indices that are at least `min_dist` apart.
     """
     # Create a working copy to modify and mask out values
-    working_arr = arr.astype(float, copy=True)
+    similarity = np.array(arr)
+    working_arr = similarity.astype(float, copy=True)
     
     selected_indices = []
     selected_values = []
