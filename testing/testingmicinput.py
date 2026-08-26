@@ -51,6 +51,8 @@ file_path_full = "bernsteinfull.wav"
 
 SAMPLE_RATE = 44100
 
+HOP_LENGTH = 512
+
 def signal_to_ampl(signal):
     stft = librosa.stft(signal)
     spectrogram = np.abs(stft)
