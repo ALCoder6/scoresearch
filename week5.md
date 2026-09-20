@@ -17,3 +17,6 @@ audio needs to be streamed in, instead of file
 displaying sheet music as visual 
 
 for when youre in a rest,
+
+solved issues from looking at ind spectrogram
+loud things taking all importance, making sure quiet noise and loud noise is differentiated by amplitude

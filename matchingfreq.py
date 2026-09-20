@@ -44,10 +44,20 @@ def plot_values_histogram(spectrogram_ampl):
 
 def cosine_similarity(window, match):
     sums = np.sum(window * match, axis=1, keepdims=True)
+    window_norm = np.linalg.norm(window, axis=1, keepdims=True)
+    match_norm = np.linalg.norm(match, axis=1, keepdims=True)
+    denominator = window_norm * match_norm
+
     output = np.zeros_like(sums)
-    denominator = np.linalg.norm(window, axis=1, keepdims=True) * np.linalg.norm(match, axis=1, keepdims=True)
     np.divide(sums, denominator, out=output, where=denominator != 0)
-    return output
+
+    ampltiude_factor_1 = np.zeros_like(sums)
+    np.divide(window_norm, match_norm, out=ampltiude_factor_1, where=match_norm != 0)
+    ampltiude_factor_2 = np.zeros_like(sums)
+    np.divide(match_norm, window_norm, out=ampltiude_factor_2, where=window_norm != 0)
+    ampltiude_factor = np.minimum(ampltiude_factor_1, ampltiude_factor_2)
+
+    return output * ampltiude_factor
 
 
 def correlate(full, match):
@@ -102,7 +112,7 @@ def top_k_non_adjacent(arr, k, min_dist=1):
     
     for _ in range(k):
         # 1. Find the index of the current maximum value
-        max_idx = np.argmax(working_arr)
+        max_idx = np.nanargmax(working_arr)
         
         # Break early if all remaining elements have been masked out
         if np.isnan(working_arr[max_idx]):
@@ -180,7 +190,8 @@ def main():
     #give_ten_potential_answer(weighted_similarity)
     top_similarity, top_indicies = top_k_non_adjacent(weighted_similarity, 10)
 
-    print(sample_position_to_seconds(top_indicies))
+    for idx, (index, similarity) in enumerate(zip(top_indicies, top_similarity)):
+        print(f"Rank {idx + 1}: Index = {index}, Similarity = {similarity:.4f}, Time = {sample_position_to_seconds(index):.2f} seconds")
 
 
 if __name__ == "__main__":
