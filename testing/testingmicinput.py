@@ -33,7 +33,6 @@ import librosa.display
 import matplotlib.pyplot as plt
 import numpy as np
 import time
-from scipy.signal import correlate
 import pandas as pd
 from scipy.io import wavfile
 import argparse
@@ -58,7 +57,7 @@ def signal_to_ampl(signal):
     spectrogram = np.abs(stft)
     return spectrogram
 
-full_signal, _ = librosa.load(file_path_full, sr=SAMPLE_RATE, duration=360)
+full_signal, _ = librosa.load(file_path_full, sr=SAMPLE_RATE)
 full_ampl = signal_to_ampl(full_signal)
 
 def audio_callback(indata, frames, time, status):
@@ -67,6 +66,39 @@ def audio_callback(indata, frames, time, status):
         print(status, file=sys.stderr)
     # Put a copy of the incoming audio block (NumPy ndarray) into the queue
     q.put(indata.copy())
+
+
+def cosine_similarity(window, match):
+    sums = np.sum(window * match, axis=1, keepdims=True)
+    window_norm = np.linalg.norm(window, axis=1, keepdims=True)
+    match_norm = np.linalg.norm(match, axis=1, keepdims=True)
+    denominator = window_norm * match_norm
+
+    output = np.zeros_like(sums)
+    np.divide(sums, denominator, out=output, where=denominator != 0)
+
+    ampltiude_factor_1 = np.zeros_like(sums)
+    np.divide(window_norm, match_norm, out=ampltiude_factor_1, where=match_norm != 0)
+    ampltiude_factor_2 = np.zeros_like(sums)
+    np.divide(match_norm, window_norm, out=ampltiude_factor_2, where=window_norm != 0)
+    ampltiude_factor = np.minimum(ampltiude_factor_1, ampltiude_factor_2)
+
+    return output * ampltiude_factor
+
+
+def correlate(full, match):
+    full_w = full.shape[1]
+    match_w = match.shape[1]
+    
+    max_col = full_w - match_w + 1
+    
+    all_windows = []
+    
+    for c in range(max_col):
+        window = full[:, c : c + match_w]
+        all_windows.append(cosine_similarity(window, match))
+                
+    return np.concat(all_windows, axis=1)
 
 
 def similarity_significance(window, match, cosine_similarity):
@@ -98,7 +130,15 @@ def weighing(full, match, cosine_similarity):
 def sample_position_to_seconds(position):
     return (position * HOP_LENGTH / SAMPLE_RATE)
 
-def top_k_non_adjacent(arr, k, min_dist=1):
+def seconds_to_readable_time(seconds):
+    minutes = int(seconds // 60)
+    remaining_seconds = seconds % 60
+    if minutes > 0:
+        return f"{minutes}m {remaining_seconds:.2f}s"
+    else:
+        return f"{remaining_seconds:.2f}s"
+
+def top_k_non_adjacent(arr, k, min_dist=100):
     similarity = np.array(arr)
     working_arr = similarity.astype(float, copy=True)
     
@@ -134,9 +174,11 @@ def process_signal(signal_block):
 
     weighted_similarity = weighing(full_ampl, match_ampl, cosine_sim)
 
-    top_similarity, top_indicies = top_k_non_adjacent(weighted_similarity, 1)
+    top_similarity, top_indicies = top_k_non_adjacent(weighted_similarity, 10)
     for idx, (index, similarity) in enumerate(zip(top_indicies, top_similarity)):
-        print(f"Rank {idx + 1}: Index = {index}, Similarity = {similarity:.4f}, Time = {sample_position_to_seconds(index):.2f} seconds")
+        match_location_seconds = sample_position_to_seconds(index)
+        readable_time = seconds_to_readable_time(match_location_seconds)
+        print(f"Rank {idx + 1}: Index = {index}, Similarity = {similarity:.4f}, Time = {readable_time} seconds")
     
     
 
@@ -154,7 +196,7 @@ def main():
     parser.add_argument('-d', '--device', type=int, help='input device ID')
     parser.add_argument('-c', '--channels', type=int, default=1, help='number of channels')
     parser.add_argument('-r', '--samplerate', type=float, default=44100, help='sampling rate (Hz)')
-    parser.add_argument('-b', '--blocksize', type=int, default=512, help='block size in samples')
+    parser.add_argument('-b', '--blocksize', type=int, default=5, help='block size in seconds')
     args = parser.parse_args()
 
     print("Starting live audio capture... Press Ctrl+C to stop.\n")
@@ -165,14 +207,18 @@ def main():
             device=args.device,
             channels=args.channels,
             samplerate=args.samplerate,
-            blocksize=args.blocksize,
+            blocksize=args.blocksize * args.samplerate,
             callback=audio_callback
         )
         
         with stream:
             while True:
                 # Retrieve incoming signal block from queue
+                print("Getting audio...")
                 signal_block = q.get()
+                signal_block = signal_block.flatten()  # Flatten to 1D if needed
+
+                print(f"Processing capture...")
                 
                 # Perform live signal operations
                 process_signal(signal_block)
